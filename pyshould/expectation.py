@@ -86,7 +86,8 @@ class Expectation(object):
             raise ex
         finally:
             # Reset the state of the object so we can use it again
-            self.reset()
+            if self.deferred:
+                self.reset()
 
     def _assertion(self, matcher, value):
         """ Perform the actual assertion for the given matcher and value. Override
@@ -225,7 +226,7 @@ class Expectation(object):
 
         # Ignore .should. style properties
         lowname = name.lower()
-        if lowname == 'should':
+        if lowname in ('should', 'to'):
             return self
         if lowname == 'should_not':
             return ExpectationNot(
@@ -349,6 +350,9 @@ class Expectation(object):
             clone.resolve(other)
             return True
         except AssertionError:
+            return False
+        # Any exception is silenced and we just return false
+        except:
             return False
 
     def __ne__(self, other):
