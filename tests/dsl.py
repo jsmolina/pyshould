@@ -18,8 +18,10 @@ class DslTestCase(unittest.TestCase):
         )
 
         for kw in keywords:
-            self.assertTrue(kw in globals(), msg='keyword "%s" not found as global' % kw)
-            self.assertTrue(kw in dir(dsl), msg='keyword "%s" not found in dsl' % kw)
+            self.assertTrue(kw in globals(),
+                            msg='keyword "%s" not found as global' % kw)
+            self.assertTrue(kw in dir(dsl),
+                            msg='keyword "%s" not found in dsl' % kw)
 
     def test_expectations(self):
         self.assertIsInstance(should, Expectation)
@@ -66,6 +68,8 @@ class DslTestCase(unittest.TestCase):
         self.assertRaises(AssertionError, lambda: all_of((1, 2)).equal(1))
         self.assertRaises(AssertionError, lambda: all_of(1, 2).equal(1))
 
+        all_of([1, 2]) | should.be_int
+
     def test_any_of(self):
         self.assertRaises(AssertionError, lambda: any_of([2, 2]).equal(1))
         self.assertRaises(AssertionError, lambda: any_of((2, 2)).equal(1))
@@ -90,12 +94,14 @@ class DslTestCase(unittest.TestCase):
         def nested_expression_ok():
             with should.throw(TypeError):
                 1 | should.equal(1)
-        self.assertRaisesRegexp(AssertionError, 'TypeError', nested_expression_ok)
+        self.assertRaisesRegexp(AssertionError,
+                                'TypeError', nested_expression_ok)
 
         def nested_expression_fail():
             with should.throw(TypeError):
                 1 | should.equal(2)
-        self.assertRaisesRegexp(AssertionError, '<2>', nested_expression_fail)
+        self.assertRaisesRegexp(AssertionError,
+                                '<2>', nested_expression_fail)
 
         with should.throw(TypeError):
             raise TypeError('foo')
@@ -153,7 +159,7 @@ class DslTestCase(unittest.TestCase):
         {} | should.be_empty
         ['foo'] | should_not.be_empty
         'foo' | should_not.be_empty
-        {'foo':'foo'} | should_not.be_empty
+        {'foo': 'foo'} | should_not.be_empty
 
     def test_matcher_composition(self):
         d = {'foo': 'bar'}
@@ -198,7 +204,8 @@ class DslTestCase(unittest.TestCase):
             pass
 
     def test_class_has_props(self):
-        d = type("CommentForm", (object,), {'text': 'textvalue', 'author': 'the_author'})
+        d = type("CommentForm", (object,),
+                 {'text': 'textvalue', 'author': 'the_author'})
 
         d | should.have_properties({
             'text': 'textvalue',
@@ -233,7 +240,8 @@ class DslTestCase(unittest.TestCase):
         d.added_text = 'textvalue'
         d.added_author = 'the_author'
 
-        d | should.have_attrs(added_text='textvalue', added_author=should.be_a_string())
+        d | should.have_attrs(added_text='textvalue',
+                              added_author=should.be_a_string())
 
     def test_object_has_dynamic_props_with_non_existing_kwargs(self):
         Cls = type("CommentForm", (object,), {})
@@ -241,7 +249,9 @@ class DslTestCase(unittest.TestCase):
         d.added_text = 'textvalue'
         d.added_author = 'the_author'
         with self.assertRaises(AssertionError):
-            d | should.have_attrs(added_text='textvalue', added_author=should.be_a_string(), fake='foo')
+            d | should.have_attrs(added_text='textvalue',
+                                  added_author=should.be_a_string(),
+                                  fake='foo')
 
     def test_has_props_non_class(self):
         d = "fail"
@@ -290,6 +300,15 @@ class DslTestCase(unittest.TestCase):
         except AssertionError:
             pass
 
+    def test_apply_all(self):
+        import json
+        d = ('{"bar": 10}', '{"bar": 20}')
+
+        d | should_all(json.loads).have_key('bar')
+
+        should_all_json = should_all(json.loads)
+        d | should_all_json.have_key('bar')
+
     def test_equality(self):
         m = should.be_int.and_eq(1)
         self.assertEqual(1, m)
@@ -317,10 +336,10 @@ class DslTestCase(unittest.TestCase):
 
     def test_mock(self):
         try:
-            from unittest.mock import Mock  # Python 3.3
+            from unittest.mock import Mock, patch  # Python 3.3
         except:
             try:
-                from mock import Mock
+                from mock import Mock, patch
             except:
                 raise unittest.SkipTest('Mock library not available, skipping test')
 
@@ -339,6 +358,10 @@ class DslTestCase(unittest.TestCase):
             AssertionError,
             lambda: mock.assert_called_with(should.any, should.greater_than(3))
         )
+
+        # Check we can wrap it even when implementing __or__
+        with patch.object(self, 'test_mock') as mock:
+            it(mock) | should.not_be_called
 
     def test_patch_mockito(self):
         import warnings
@@ -380,6 +403,65 @@ class DslTestCase(unittest.TestCase):
         with should_not.throw(SystemExit):
             pass
 
+    def test_wrap_value(self):
+        it(10) | should.eq(10)
+
+    def test_dumper(self):
+        output = []
+        mockdumper = dumper(reporter=output.append)
+
+        data = {'foo': 'Foo', 'bar': 'Bar', 'baz': 'Baz'}
+        data | should.eq({
+            'foo': mockdumper(msg='this is foo'),
+            'bar': mockdumper,
+            'baz': mockdumper(should.start_with('B'), msg='BAZ!')
+        })
+
+        output.sort()
+        output | should.eq([
+            "'Bar'",
+            "BAZ!: 'Baz'",
+            "this is foo: 'Foo'",
+        ])
+
+    def test_contain_sparse_in_order(self):
+        with self.assertRaises(AssertionError):
+            [1, 4, 3, 3, 3, 6] | should.contain_sparse_in_order(
+                should.eq(1), should.be_greater_than(7)
+            )
+
+        with self.assertRaises(AssertionError):
+            [1, 4, 3, 3, 3, 8, 9] | should.contain_sparse_in_order(
+                should.eq(1), should.be_greater_than(7)
+            )
+
+        with self.assertRaises(AssertionError):
+            [9, 1] | should.contain_sparse_in_order(
+                should.eq(1), should.be_greater_than(7)
+            )
+
+        with self.assertRaises(AssertionError):
+            1 | should.contain_sparse_in_order(
+                should.eq(1)
+            )
+
+        with self.assertRaises(AssertionError):
+            [1] | should.contain_sparse_in_order(
+                should.eq(1), should.be_greater_than(7)
+            )
+
+        [1, 4, 3, 3, 8, 6, 2] | should.contain_sparse_in_order(
+            should.eq(1), should.be_greater_than(7)
+        )
+
+        [0, 1, 4, 3, 3, 8, 6, 2] | should.contain_sparse_in_order(
+            should.eq(1), should.be_greater_than(7)
+        )
+
+        (i for i in range(9)) | should.contain_sparse_in_order(
+            1, should.be_greater_than(7)
+        )
+
 
 class NonEmptyConstructorException(Exception):
 
@@ -400,4 +482,4 @@ class NonEmptyConstructorException(Exception):
         return unicode(self).encode('utf-8')
 
     def __unicode__(self):
-        return 'Missing fields: %s' % (self.parameter)            
+        return 'Missing fields: %s' % (self.parameter)

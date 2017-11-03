@@ -7,6 +7,7 @@ import hamcrest as hc
 from difflib import get_close_matches
 from hamcrest.core.base_matcher import BaseMatcher
 from hamcrest.library.collection.isdict_containingentries import IsDictContainingEntries
+from hamcrest.library.collection.issequence_containing import IsSequenceContainingEvery
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 
 
@@ -179,21 +180,22 @@ register(hc.close_to,
          'be_close_to')
 register(hc.greater_than,
          'be_greater_than', 'be_greater', 'be_gt',
-         'be_above', 
+         'be_above',
          'be_more_than', 'be_more')
 register(hc.greater_than_or_equal_to,
-         'be_greater_than_or_equal_to', 'be_greater_or_equal', 'be_ge', 
-         'be_more_than_or_equal', 'be_more_or_equal' 
+         'be_greater_than_or_equal_to', 'be_greater_or_equal', 'be_ge',
+         'be_more_than_or_equal', 'be_more_or_equal',
          'be_at_least')
 register(hc.less_than,
          'be_less_than', 'be_less', 'be_lt', 'be_below')
 register(hc.less_than_or_equal_to,
-         'be_less_than_or_equal_to', 'be_less_or_equal', 'be_le', 
+         'be_less_than_or_equal_to', 'be_less_or_equal', 'be_le',
          'be_at_most')
 register(hc.has_length,
          'have_length', 'have_len')
 register(hc.has_property,
-         'have_the_property', 'contain_the_property', 'have_the_prop', 'contain_the_prop')
+         'have_the_property', 'contain_the_property',
+         'have_the_prop', 'contain_the_prop')
 register(hc.has_string,
          'have_the_string', 'contain_the_string')
 register(hc.equal_to_ignoring_case,
@@ -370,7 +372,7 @@ register(IsNumeric, 'be_numeric')
 register(IsString, 'be_a_string')
 register(IsStr, 'be_a_str')
 register(IsUnicode, 'be_an_unicode_string', 'be_an_unicode')
-register(IsUnicode, 'be_a_binary_string', 'be_a_binary')
+register(IsBinary, 'be_a_binary_string', 'be_a_binary')
 register(IsByteArray, 'be_a_bytearray', 'be_a_byte_array')
 register(IsDict, 'be_a_dictionary', 'be_a_dict')
 register(IsList, 'be_a_list', 'be_an_array')
@@ -532,9 +534,11 @@ class RaisesError(BaseMatcher):
 
     def describe_to(self, desc):
         if self.thrown and self.message:
-            desc.append_text('to raise an exception with message "%s"' % self.message)
+            desc.append_text('to raise an exception with message "%s"'
+                             % self.message)
         elif self.thrown and self.regex:
-            desc.append_text('to raise an exception matching /%s/' % self.regex)
+            desc.append_text('to raise an exception matching /%s/'
+                             % self.regex)
         else:
             desc.append_text('to raise an exception')
             if self.expected:
@@ -625,7 +629,7 @@ register(Changes,
 class Callback(BaseMatcher):
     """ Checks against an user supplied callback. The callback
         can should return True to indicate a successful match or
-        False to indicate an unsuccessful one. 
+        False to indicate an unsuccessful one.
     """
 
     def __init__(self, callback):
@@ -647,7 +651,8 @@ class Callback(BaseMatcher):
 
     def describe_to(self, desc):
         desc.append_text('passses callback ')
-        if isinstance(self.callback, type(lambda: None)) and self.callback.__name__ == '<lambda>':
+        if (isinstance(self.callback, type(lambda: None))
+                and self.callback.__name__ == '<lambda>'):
             desc.append_text(self.callback.__name__)
         else:
             desc.append_text('{0}'.format(self.callback))
@@ -699,7 +704,7 @@ class RegexMatcher(BaseMatcher):
     def _matches(self, item):
         # Make sure we are matching against a string
         hc.assert_that(item, IsString())
-        
+
         match = re.search(self.regex, item, self.flags)
         return match is not None
 
@@ -762,3 +767,56 @@ class IsObjectContainingEntries(IsDictContainingEntries):
 register(IsObjectContainingEntries,
          'have_the_properties', 'contain_the_properties', 'have_the_attributes', 'contain_the_attributes',
          'have_props', 'contain_props', 'have_attrs', 'contain_attrs')
+
+
+class IsSequenceContainingEveryInOrderSparse(IsSequenceContainingEvery):
+    """
+    Matches if a list contains every given element in the same order but with
+    optional interleaved items.
+    No optional elements matching the required ones are allowed.
+    Mismatch description prioritizes missing items over wrong order.
+    e.g. [1, 3, 4] IsSequenceContainingEveryInOrder [1, 4]
+                   but NOT IsSequenceContainingEveryInOrder [4, 1]
+                   and NOT IsSequenceContainingEveryInOrder [1, 4, 4]
+    """
+
+    def __init__(self, *element_matchers):
+        delegates = [hc.has_item(e) for e in element_matchers]
+        self.matcher_all = hc.all_of(*delegates)
+        self.matcher_any = hc.any_of(*delegates)
+        self.matcher_order = hc.contains(*element_matchers)
+        self.order_seq = None
+
+    def _matches(self, sequence):
+        self.order_seq = None
+        try:
+            seq = list(sequence)
+            if self.matcher_all.matches(seq):
+                self.order_seq = [i for i in seq if self.matcher_any.matches([i])]
+                return self.matcher_order.matches(self.order_seq)
+            else:
+                return False
+        except TypeError:
+            return False
+
+    def describe_mismatch(self, item, mismatch_description):
+        if self.order_seq is None:
+            mismatch_description.append_text(' instead of a ')
+            self.matcher_all.describe_mismatch(item, mismatch_description)
+        else:
+            self.matcher_order.describe_mismatch(self.order_seq, mismatch_description)
+            mismatch_description.append_text(
+                ' from candidate list elements: '
+            ).append_description_of(self.order_seq).append_text(
+                ' that satisfied those conditions from '
+            ).append_description_of(item)
+
+    def describe_to(self, description):
+        self.matcher_all.describe_to(description)
+        description.append_text(' in this specific order')
+
+
+register(IsSequenceContainingEveryInOrderSparse,
+         'contain_sparse', 'have_sparse', 'contain_sparse_in_order',
+         'contain_in_order_sparse', 'have_every_in_order_sparse',
+         'have_in_order_sparse', 'contain_every_in_order_sparse')

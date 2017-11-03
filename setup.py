@@ -10,5 +10,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=['pyhamcrest'],
+    tests_require=['nose','pyhamcrest'],
+    test_suite="nose.collector",
     zip_safe=False,
     )
