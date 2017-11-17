@@ -3,7 +3,7 @@ Defines the registry of matchers and the standard set of matchers
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 import hamcrest as hc
 from difflib import get_close_matches
 from hamcrest.core.base_matcher import BaseMatcher
@@ -368,7 +368,7 @@ class IsClass(BaseMatcher):
 
 class IsDate(TypeMatcher):
     """ Check if the value is a date """
-    types = datetime
+    types = (datetime, date)
     expected = 'a date'
 
 
